@@ -66,7 +66,8 @@
 				$zoneText = $axfr['domain']['zone_file'];
 				$records = $client->do('GET', "domains/${domain}/records");
 			} catch (ClientException $e) {
-				return error("Failed to transfer DNS records from DO - try again later");
+				error("Failed to transfer DNS records from DO - try again later");
+				return null;
 			}
 
 			$this->zoneCache[$domain] = [];
