@@ -28,6 +28,7 @@
 			} catch (RequestException $e) {
 				$response = \json_decode($e->getResponse()->getBody()->getContents(), true);
 				$reason = array_get($response, 'message', "Invalid key");
+
 				return error("DO key failed: %s", $reason);
 			}
 

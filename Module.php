@@ -44,108 +44,6 @@
 		}
 
 		/**
-		 * Get raw zone data
-		 *
-		 * @param string $domain
-		 * @return null|string
-		 */
-		protected function zoneAxfr($domain): ?string
-		{
-			$client = $this->makeApi();
-			try {
-				$axfr = $client->do('GET', "domains/${domain}");
-				if (empty($axfr['domain']['zone_file'])) {
-					// zone doesn't exist
-					return null;
-				}
-			} catch (ClientException $e) {
-				return null;
-			}
-
-			try {
-				$zoneText = $axfr['domain']['zone_file'];
-				$records = $client->do('GET', "domains/${domain}/records");
-			} catch (ClientException $e) {
-				error("Failed to transfer DNS records from DO - try again later");
-				return null;
-			}
-
-			$this->zoneCache[$domain] = [];
-			foreach ($records['domain_records'] as $r) {
-				switch ($r['type']) {
-					case 'CAA':
-						$parameter = $r['flags'] . " " . $r['tag'] . " " . $r['value'];
-						break;
-					case 'SRV':
-						$parameter = $r['priority'] . " " . $r['weight'] . " " . $r['port'] . " " . $r['data'];
-						break;
-					case 'MX':
-						$parameter = $r['priority'] . " " . $r['data'];
-						break;
-					default:
-						$parameter = $r['data'];
-				}
-				$this->addCache(new Record($domain,
-					[
-						'name'      => $r['name'],
-						'rr'        => $r['type'],
-						'ttl'       => $r['ttl'] ?? static::DNS_TTL,
-						'parameter' => $parameter,
-						'meta'      => [
-							'id' => $r['id']
-						]
-					]
-				));
-			}
-
-			return $zoneText;
-		}
-
-		/**
-		 * Modify a DNS record
-		 *
-		 * @param string $zone
-		 * @param Record $old
-		 * @param Record $new
-		 * @return bool
-		 */
-		protected function atomicUpdate(string $zone, Record $old, Record $new): bool
-		{
-			// @var \Cloudflare\Api\Endpoints\DNS @api
-			if (!$this->canonicalizeRecord($zone, $old['name'], $old['rr'], $old['parameter'], $old['ttl'])) {
-				return false;
-			}
-			if (!$this->getRecordId($old)) {
-				return error("failed to find record ID in DO zone `%s' - does `%s' (rr: `%s', parameter: `%s') exist?",
-					$zone, $old['name'], $old['rr'], $old['parameter']);
-			}
-			if (!$this->canonicalizeRecord($zone, $new['name'], $new['rr'], $new['parameter'], $new['ttl'])) {
-				return false;
-			}
-			$api = $this->makeApi();
-			try {
-				$merged = clone $old;
-				$new = $merged->merge($new);
-				$id = $this->getRecordId($old);
-				$api->do('PUT', "domains/${zone}/records/${id}", $this->formatRecord($new));
-			} catch (ClientException $e) {
-				$reason = \json_decode($e->getResponse()->getBody()->getContents());
-
-				return error("Failed to update record `%s' on zone `%s' (old - rr: `%s', param: `%s'; new - rr: `%s', param: `%s'): %s",
-					$old['name'],
-					$zone,
-					$old['rr'],
-					$old['parameter'], $new['name'] ?? $old['name'], $new['parameter'] ?? $old['parameter'],
-					$reason->errors[0]->message
-				);
-			}
-			array_forget($this->zoneCache[$old->getZone()], $this->getCacheKey($old));
-			$this->addCache($new);
-
-			return true;
-		}
-
-		/**
 		 * Add a DNS record
 		 *
 		 * @param string $zone
@@ -203,7 +101,8 @@
 			}
 			$api = $this->makeApi();
 
-			$id = $this->getRecordId($r = new Record($zone, ['name' => $subdomain, 'rr' => $rr, 'parameter' => $param]));
+			$id = $this->getRecordId($r = new Record($zone,
+				['name' => $subdomain, 'rr' => $rr, 'parameter' => $param]));
 			if (!$id) {
 				$fqdn = ltrim(implode('.', [$subdomain, $zone]), '.');
 
@@ -214,9 +113,11 @@
 				$api->do('DELETE', "domains/${zone}/records/${id}");
 			} catch (ClientException $e) {
 				$fqdn = ltrim(implode('.', [$subdomain, $zone]), '.');
+
 				return error("Failed to delete record `%s' type %s", $fqdn, $rr);
 			}
 			array_forget($this->zoneCache[$r->getZone()], $this->getCacheKey($r));
+
 			return $api->getResponse()->getStatusCode() === 204;
 		}
 
@@ -246,7 +147,7 @@
 			$api = $this->makeApi();
 			try {
 				$api->do('POST', 'domains', [
-					'name' => $domain,
+					'name'       => $domain,
 					'ip_address' => $ip
 				]);
 			} catch (ClientException $e) {
@@ -270,24 +171,123 @@
 			} catch (ClientException $e) {
 				return error("Failed to remove zone `%s', error: %s", $domain, $e->getMessage());
 			}
+
 			return true;
 		}
 
-		protected function hasCnameApexRestriction(): bool
+		/**
+		 * Get raw zone data
+		 *
+		 * @param string $domain
+		 * @return null|string
+		 */
+		protected function zoneAxfr($domain): ?string
 		{
-			return false;
-		}
+			$client = $this->makeApi();
+			try {
+				$axfr = $client->do('GET', "domains/${domain}");
+				if (empty($axfr['domain']['zone_file'])) {
+					// zone doesn't exist
+					return null;
+				}
+			} catch (ClientException $e) {
+				return null;
+			}
 
+			try {
+				$zoneText = $axfr['domain']['zone_file'];
+				$records = $client->do('GET', "domains/${domain}/records");
+			} catch (ClientException $e) {
+				error("Failed to transfer DNS records from DO - try again later");
+
+				return null;
+			}
+
+			$this->zoneCache[$domain] = [];
+			foreach ($records['domain_records'] as $r) {
+				switch ($r['type']) {
+					case 'CAA':
+						$parameter = $r['flags'] . " " . $r['tag'] . " " . $r['value'];
+						break;
+					case 'SRV':
+						$parameter = $r['priority'] . " " . $r['weight'] . " " . $r['port'] . " " . $r['data'];
+						break;
+					case 'MX':
+						$parameter = $r['priority'] . " " . $r['data'];
+						break;
+					default:
+						$parameter = $r['data'];
+				}
+				$this->addCache(new Record($domain,
+					[
+						'name'      => $r['name'],
+						'rr'        => $r['type'],
+						'ttl'       => $r['ttl'] ?? static::DNS_TTL,
+						'parameter' => $parameter,
+						'meta'      => [
+							'id' => $r['id']
+						]
+					]
+				));
+			}
+
+			return $zoneText;
+		}
 
 		private function makeApi(): Api
 		{
 			return new Api($this->key);
 		}
 
-		protected function formatRecord(Record $r) {
+		/**
+		 * Modify a DNS record
+		 *
+		 * @param string $zone
+		 * @param Record $old
+		 * @param Record $new
+		 * @return bool
+		 */
+		protected function atomicUpdate(string $zone, Record $old, Record $new): bool
+		{
+			// @var \Cloudflare\Api\Endpoints\DNS @api
+			if (!$this->canonicalizeRecord($zone, $old['name'], $old['rr'], $old['parameter'], $old['ttl'])) {
+				return false;
+			}
+			if (!$this->getRecordId($old)) {
+				return error("failed to find record ID in DO zone `%s' - does `%s' (rr: `%s', parameter: `%s') exist?",
+					$zone, $old['name'], $old['rr'], $old['parameter']);
+			}
+			if (!$this->canonicalizeRecord($zone, $new['name'], $new['rr'], $new['parameter'], $new['ttl'])) {
+				return false;
+			}
+			$api = $this->makeApi();
+			try {
+				$merged = clone $old;
+				$new = $merged->merge($new);
+				$id = $this->getRecordId($old);
+				$api->do('PUT', "domains/${zone}/records/${id}", $this->formatRecord($new));
+			} catch (ClientException $e) {
+				$reason = \json_decode($e->getResponse()->getBody()->getContents());
+
+				return error("Failed to update record `%s' on zone `%s' (old - rr: `%s', param: `%s'; new - rr: `%s', param: `%s'): %s",
+					$old['name'],
+					$zone,
+					$old['rr'],
+					$old['parameter'], $new['name'] ?? $old['name'], $new['parameter'] ?? $old['parameter'],
+					$reason->errors[0]->message
+				);
+			}
+			array_forget($this->zoneCache[$old->getZone()], $this->getCacheKey($old));
+			$this->addCache($new);
+
+			return true;
+		}
+
+		protected function formatRecord(Record $r)
+		{
 			$args = [
 				'type' => strtoupper($r['rr']),
-				'ttl' => $r['ttl'] ?? static::DNS_TTL
+				'ttl'  => $r['ttl'] ?? static::DNS_TTL
 			];
 			switch ($args['type']) {
 				case 'A':
@@ -297,24 +297,32 @@
 				case 'NS':
 					return $args + ['name' => $r['name'], 'data' => $r['parameter']];
 				case 'MX':
-					return $args + ['name' => $r['name'], 'priority' => (int)$r->getMeta('priority'), 'data' => rtrim($r->getMeta('data'),'.') . '.'];
+					return $args + ['name'     => $r['name'],
+									'priority' => (int)$r->getMeta('priority'),
+									'data'     => rtrim($r->getMeta('data'), '.') . '.'
+						];
 				case 'SRV':
 					return $args + [
-						'name' => $r['name'],
-						'priority' => $r->getMeta('priority'),
-						'weight' => $r->getMeta('weight'),
-						'port' => $r->getMeta('port'),
-						'data' => $r->getMeta('data')
-					];
+							'name'     => $r['name'],
+							'priority' => $r->getMeta('priority'),
+							'weight'   => $r->getMeta('weight'),
+							'port'     => $r->getMeta('port'),
+							'data'     => $r->getMeta('data')
+						];
 				case 'CAA':
 					return $args + [
-						'flags' => $r->getMeta('flags'),
-						'tag' => $r->getMeta('tag'),
-						'data' => $r->getMeta('data')
-					];
+							'flags' => $r->getMeta('flags'),
+							'tag'   => $r->getMeta('tag'),
+							'data'  => $r->getMeta('data')
+						];
 				default:
 					fatal("Unsupported DNS RR type `%s'", $r['type']);
 			}
+		}
+
+		protected function hasCnameApexRestriction(): bool
+		{
+			return false;
 		}
 
 
