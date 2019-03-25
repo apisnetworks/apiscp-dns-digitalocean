@@ -12,12 +12,13 @@
 
 	use GuzzleHttp\Exception\ClientException;
 	use Module\Provider\Contracts\ProviderInterface;
-	use Opcenter\Dns\Record;
+	use Opcenter\Dns\Record as BaseRecord;
 
 	class Module extends \Dns_Module implements ProviderInterface
 	{
-		const DNS_TTL = 1800;
+		use \NamespaceUtilitiesTrait;
 
+		const DNS_TTL = 1800;
 		/**
 		 * apex markers are marked with @
 		 */
@@ -31,9 +32,7 @@
 			'NS',
 			'SRV',
 			'TXT',
-			'ANY',
 		];
-		use \NamespaceUtilitiesTrait;
 		// @var array API credentials
 		private $key;
 
@@ -74,11 +73,12 @@
 				$record['name'] = '@';
 			}
 			try {
+				$this->formatRecord($record);
 				$ret = $api->do('POST', "domains/${zone}/records", $this->formatRecord($record));
+				$record->setMeta('id', $ret['id']);
 				$this->addCache($record);
 			} catch (ClientException $e) {
 				$fqdn = ltrim(implode('.', [$subdomain, $zone]), '.');
-
 				return error("Failed to create record `%s' type %s: %s", $fqdn, $rr, $e->getMessage());
 			}
 
@@ -207,7 +207,7 @@
 			foreach ($records['domain_records'] as $r) {
 				switch ($r['type']) {
 					case 'CAA':
-						$parameter = $r['flags'] . " " . $r['tag'] . " " . $r['value'];
+						$parameter = $r['flags'] . " " . $r['tag'] . " " . $r['data'];
 						break;
 					case 'SRV':
 						$parameter = $r['priority'] . " " . $r['weight'] . " " . $r['port'] . " " . $r['data'];
@@ -247,7 +247,7 @@
 		 * @param Record $new
 		 * @return bool
 		 */
-		protected function atomicUpdate(string $zone, Record $old, Record $new): bool
+		protected function atomicUpdate(string $zone, BaseRecord $old, BaseRecord $new): bool
 		{
 			// @var \Cloudflare\Api\Endpoints\DNS @api
 			if (!$this->canonicalizeRecord($zone, $old['name'], $old['rr'], $old['parameter'], $old['ttl'])) {
@@ -287,34 +287,35 @@
 		{
 			$args = [
 				'type' => strtoupper($r['rr']),
-				'ttl'  => $r['ttl'] ?? static::DNS_TTL
+				'ttl'  => (int)($r['ttl'] ?? static::DNS_TTL),
+				'name' => $r['name']
 			];
 			switch ($args['type']) {
+				case 'CNAME':
+				case 'NS':
+					$r['parameter'] = rtrim($r['parameter'], '.') . '.';
 				case 'A':
 				case 'AAAA':
-				case 'CNAME':
 				case 'TXT':
-				case 'NS':
-					return $args + ['name' => $r['name'], 'data' => $r['parameter']];
+					return $args + ['data' => $r['parameter']];
 				case 'MX':
-					return $args + ['name'     => $r['name'],
-									'priority' => (int)$r->getMeta('priority'),
-									'data'     => rtrim($r->getMeta('data'), '.') . '.'
-						];
+					return $args + [
+						'priority' => (int)$r->getMeta('priority'),
+						'data'     => rtrim($r->getMeta('data'), '.') . '.'
+					];
 				case 'SRV':
 					return $args + [
-							'name'     => $r['name'],
-							'priority' => $r->getMeta('priority'),
-							'weight'   => $r->getMeta('weight'),
-							'port'     => $r->getMeta('port'),
-							'data'     => $r->getMeta('data')
-						];
+						'priority' => (int)$r->getMeta('priority'),
+						'weight'   => (int)$r->getMeta('weight'),
+						'port'     => (int)$r->getMeta('port'),
+						'data'     => rtrim($r->getMeta('data'), '.') . '.'
+					];
 				case 'CAA':
 					return $args + [
-							'flags' => $r->getMeta('flags'),
-							'tag'   => $r->getMeta('tag'),
-							'data'  => $r->getMeta('data')
-						];
+						'flags' => (int)$r->getMeta('flags'),
+						'tag'   => $r->getMeta('tag'),
+						'data'  => $r->getMeta('data')
+					];
 				default:
 					fatal("Unsupported DNS RR type `%s'", $r['type']);
 			}
