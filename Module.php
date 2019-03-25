@@ -75,6 +75,10 @@
 			try {
 				$this->formatRecord($record);
 				$ret = $api->do('POST', "domains/${zone}/records", $this->formatRecord($record));
+				if (!isset($ret['id']) && isset($ret['domain_record'])) {
+					// pluck from domain_record.id
+					$ret = $ret['domain_record'];
+				}
 				$record->setMeta('id', $ret['id']);
 				$this->addCache($record);
 			} catch (ClientException $e) {
@@ -103,9 +107,9 @@
 
 			$id = $this->getRecordId($r = new Record($zone,
 				['name' => $subdomain, 'rr' => $rr, 'parameter' => $param]));
+
 			if (!$id) {
 				$fqdn = ltrim(implode('.', [$subdomain, $zone]), '.');
-
 				return error("Record `%s' (rr: `%s', param: `%s')  does not exist", $fqdn, $rr, $param);
 			}
 
@@ -193,14 +197,15 @@
 			} catch (ClientException $e) {
 				return null;
 			}
+			for ($i = 0; $i < 5; $i++) {
+				try {
+					$zoneText = $axfr['domain']['zone_file'];
+					$records = $client->do('GET', "domains/${domain}/records");
+				} catch (ClientException $e) {
+					error("Failed to transfer DNS records from DO - try again later");
 
-			try {
-				$zoneText = $axfr['domain']['zone_file'];
-				$records = $client->do('GET', "domains/${domain}/records");
-			} catch (ClientException $e) {
-				error("Failed to transfer DNS records from DO - try again later");
-
-				return null;
+					return null;
+				}
 			}
 
 			$this->zoneCache[$domain] = [];
@@ -265,7 +270,11 @@
 				$merged = clone $old;
 				$new = $merged->merge($new);
 				$id = $this->getRecordId($old);
-				$api->do('PUT', "domains/${zone}/records/${id}", $this->formatRecord($new));
+				$ret = $api->do('PUT', "domains/${zone}/records/${id}", $this->formatRecord($new));
+				if (isset($ret['domain_record'])) {
+					$ret = $ret['domain_record'];
+				}
+				$new->setMeta('id', $ret['id'] ?? null);
 			} catch (ClientException $e) {
 				$reason = \json_decode($e->getResponse()->getBody()->getContents());
 

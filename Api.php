@@ -10,11 +10,17 @@
 
 	namespace Opcenter\Dns\Providers\Digitalocean;
 
+	use GuzzleHttp\Exception\ServerException;
 	use GuzzleHttp\Psr7\Response;
 
 	class Api
 	{
 		protected const DO_ENDPOINT = 'https://api.digitalocean.com/v2/';
+		/**
+		 * @var int call counter
+		 */
+		private static $callCount = 0;
+
 		/**
 		 * @var \GuzzleHttp\Client
 		 */
@@ -54,16 +60,25 @@
 				warn("Stripping `/' from endpoint `%s'", $endpoint);
 				$endpoint = ltrim($endpoint, '/');
 			}
-
-			$this->lastResponse = $this->client->request($method, $endpoint, [
-				'headers' => [
-					'User-Agent'    => PANEL_BRAND . " " . APNSCP_VERSION,
-					'Accept'        => 'application/json',
-					'Authorization' => 'Bearer ' . $this->key
-				],
-				'json'    => $params
-			]);
-
+			try {
+				$this->lastResponse = $this->client->request($method, $endpoint, [
+					'headers' => [
+						'User-Agent'    => PANEL_BRAND . " " . APNSCP_VERSION,
+						'Accept'        => 'application/json',
+						'Authorization' => 'Bearer ' . $this->key
+					],
+					'json'    => $params
+				]);
+			} catch (ServerException $e) {
+				self::$callCount++;
+				if (self::$callCount > 3 || $e->getResponse()->getStatusCode() !== 500) {
+					throw $e;
+				}
+				// {"id": "internal_server_error", "message": "Server was unable to give you a response." }
+				sleep(1);
+				return $this->do($method, $endpoint, $params);
+			}
+			self::$callCount = 0;
 			return \json_decode($this->lastResponse->getBody()->getContents(), true) ?? [];
 		}
 
