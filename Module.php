@@ -277,13 +277,13 @@
 				$new->setMeta('id', $ret['id'] ?? null);
 			} catch (ClientException $e) {
 				$reason = \json_decode($e->getResponse()->getBody()->getContents());
-
+				$msg = $reason->errors[0]->message ?? $reason->message;
 				return error("Failed to update record `%s' on zone `%s' (old - rr: `%s', param: `%s'; new - rr: `%s', param: `%s'): %s",
 					$old['name'],
 					$zone,
 					$old['rr'],
 					$old['parameter'], $new['name'] ?? $old['name'], $new['parameter'] ?? $old['parameter'],
-					$reason->errors[0]->message
+					$msg
 				);
 			}
 			array_forget($this->zoneCache[$old->getZone()], $this->getCacheKey($old));

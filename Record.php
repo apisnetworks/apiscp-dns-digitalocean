@@ -15,6 +15,8 @@
 
 	class Record extends \Opcenter\Dns\Record
 	{
+		protected $ttl = Module::DNS_TTL;
+
 		protected function formatCaa() {
 			return $this->appendDot();
 		}
