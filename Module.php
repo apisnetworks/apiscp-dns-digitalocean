@@ -106,7 +106,7 @@
 			$api = $this->makeApi();
 
 			$id = $this->getRecordId($r = new Record($zone,
-				['name' => $subdomain, 'rr' => $rr, 'parameter' => $param]));
+				['name' => $subdomain, 'rr' => $rr, 'parameter' => $param, 'ttl' => null]));
 
 			if (!$id) {
 				$fqdn = ltrim(implode('.', [$subdomain, $zone]), '.');
@@ -258,7 +258,8 @@
 			if (!$this->canonicalizeRecord($zone, $old['name'], $old['rr'], $old['parameter'], $old['ttl'])) {
 				return false;
 			}
-			if (!$this->getRecordId($old)) {
+			$old['ttl'] = null;
+			if (!($id = $this->getRecordId($old))) {
 				return error("failed to find record ID in DO zone `%s' - does `%s' (rr: `%s', parameter: `%s') exist?",
 					$zone, $old['name'], $old['rr'], $old['parameter']);
 			}
@@ -269,7 +270,6 @@
 			try {
 				$merged = clone $old;
 				$new = $merged->merge($new);
-				$id = $this->getRecordId($old);
 				$ret = $api->do('PUT', "domains/${zone}/records/${id}", $this->formatRecord($new));
 				if (isset($ret['domain_record'])) {
 					$ret = $ret['domain_record'];
