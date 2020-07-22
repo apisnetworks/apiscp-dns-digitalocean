@@ -179,7 +179,7 @@
 		 * @param string $domain
 		 * @return null|string
 		 */
-		protected function zoneAxfr($domain): ?string
+		protected function zoneAxfr(string $domain): ?string
 		{
 			$client = $this->makeApi();
 			try {
@@ -196,7 +196,7 @@
 					$zoneText = $axfr['domain']['zone_file'];
 					$records = $client->do('GET', "domains/${domain}/records");
 				} catch (ClientException $e) {
-					error("Failed to transfer DNS records from DO - try again later");
+					error('Failed to transfer DNS records from DO - try again later');
 
 					return null;
 				}
@@ -206,13 +206,13 @@
 			foreach ($records['domain_records'] as $r) {
 				switch ($r['type']) {
 					case 'CAA':
-						$parameter = $r['flags'] . " " . $r['tag'] . " " . $r['data'];
+						$parameter = $r['flags'] . ' ' . $r['tag'] . ' ' . $r['data'];
 						break;
 					case 'SRV':
-						$parameter = $r['priority'] . " " . $r['weight'] . " " . $r['port'] . " " . $r['data'];
+						$parameter = $r['priority'] . ' ' . $r['weight'] . ' ' . $r['port'] . ' ' . $r['data'];
 						break;
 					case 'MX':
-						$parameter = $r['priority'] . " " . $r['data'];
+						$parameter = $r['priority'] . ' ' . $r['data'];
 						break;
 					default:
 						$parameter = $r['data'];
