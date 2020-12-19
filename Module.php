@@ -33,6 +33,10 @@
 			'SRV',
 			'TXT',
 		];
+
+		// @var int minimum TTL
+		public const DNS_TTL_MIN = 120;
+
 		// @var array API credentials
 		private $key;
 
