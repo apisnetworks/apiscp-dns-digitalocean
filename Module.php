@@ -35,7 +35,7 @@
 		];
 
 		// @var int minimum TTL
-		public const DNS_TTL_MIN = 120;
+		public const DNS_TTL_MIN = 30;
 
 		// @var array API credentials
 		private $key;
