@@ -26,10 +26,16 @@
 			try {
 				(new Api($key))->do('GET', 'account');
 			} catch (RequestException $e) {
-				$response = \json_decode($e->getResponse()->getBody()->getContents(), true);
-				$reason = array_get($response, 'message', 'Invalid key');
+				$reason = $e->getMessage();
+				if (null !== ($response = $e->getResponse())) {
+					$response = \json_decode($response->getBody()->getContents(), true);
+					$reason = array_get($response, 'message', 'Invalid key');
+				}
 
-				return error('DO key failed: %s', $reason);
+				return error('%(provider)s key validation failed: %(reason)s', [
+					'provider' => 'Digitalocean',
+					'reason'   => $reason
+				]);
 			}
 
 			return true;
