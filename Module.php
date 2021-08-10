@@ -216,6 +216,9 @@
 			$this->zoneCache[$domain] = [];
 			foreach ($records['domain_records'] as $r) {
 				switch ($r['type']) {
+					case 'SOA':
+						// SOA records are improperly formatted
+						continue 2;
 					case 'CAA':
 						$parameter = $r['flags'] . ' ' . $r['tag'] . ' ' . $r['data'];
 						break;
