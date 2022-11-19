@@ -119,7 +119,6 @@
 				$api->do('DELETE', "domains/${zone}/records/${id}");
 			} catch (ClientException $e) {
 				$fqdn = ltrim(implode('.', [$subdomain, $zone]), '.');
-
 				return error("Failed to delete record `%s' type %s", $fqdn, $rr);
 			}
 
@@ -194,7 +193,7 @@
 		{
 			$client = $this->makeApi();
 			try {
-				$axfr = $client->do('GET', "domains/${domain}");
+				$axfr = $client->do('GET', "domains/${domain}?per_page=100");
 				if (empty($axfr['domain']['zone_file'])) {
 					// zone doesn't exist
 					return null;
@@ -204,8 +203,19 @@
 			}
 			for ($i = 0; $i < 5; $i++) {
 				try {
+					$records = [];
 					$zoneText = $axfr['domain']['zone_file'];
-					$records = $client->do('GET', "domains/${domain}/records");
+					$url = "domains/${domain}/records";
+					$queryStr = "per_page=100";
+					while (true) {
+						$batch = $client->do('GET', "$url?$queryStr");
+						$records = array_merge_recursive($records, $batch['domain_records']);
+						if (!$url = array_get($batch, 'links.pages.next')) {
+							break;
+						}
+
+						$queryStr = parse_url($url)['query'];
+					}
 				} catch (ClientException $e) {
 					error('Failed to transfer DNS records from DO - try again later');
 
@@ -214,7 +224,7 @@
 			}
 
 			$this->zoneCache[$domain] = [];
-			foreach ($records['domain_records'] as $r) {
+			foreach ($records as $r) {
 				switch ($r['type']) {
 					case 'SOA':
 						// SOA records are improperly formatted

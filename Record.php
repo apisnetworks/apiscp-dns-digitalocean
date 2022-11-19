@@ -18,7 +18,9 @@
 		protected $ttl = Module::DNS_TTL;
 
 		protected function formatCaa() {
-			return $this->appendDot();
+			// normalize target without quotes, period
+			$this->setMeta('data', trim($this->getMeta('data'), '".'));
+			$this->appendDot();
 		}
 
 		protected function formatCname() {
