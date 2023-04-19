@@ -36,6 +36,9 @@
 		// @var int minimum TTL
 		public const DNS_TTL_MIN = 30;
 
+		// Avoid duplicating apex NS records
+		public const SHOW_NS_APEX = false;
+
 		// @var array API credentials
 		private $key;
 
