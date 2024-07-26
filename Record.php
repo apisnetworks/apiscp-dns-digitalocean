@@ -43,7 +43,7 @@
 			if (null !== ($data = $this->getMeta('data'))) {
 				$this->setMeta('data', rtrim($data, '.') . '.');
 			}
-			$this->parameter = rtrim($this->parameter, '.') . '.';
+			$this->parameter = $this->parameter ? rtrim($this->parameter, '.') . '.' : null;
 		}
 
 	}
