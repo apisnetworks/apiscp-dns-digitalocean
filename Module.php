@@ -90,7 +90,7 @@
 			}
 			try {
 				$this->formatRecord($record);
-				$ret = $api->do('POST', "domains/${zone}/records", $this->formatRecord($record));
+				$ret = $api->do('POST', "domains/{$zone}/records", $this->formatRecord($record));
 				if (!isset($ret['id']) && isset($ret['domain_record'])) {
 					// pluck from domain_record.id
 					$ret = $ret['domain_record'];
@@ -126,7 +126,7 @@
 			}
 
 			try {
-				$api->do('DELETE', "domains/${zone}/records/${id}");
+				$api->do('DELETE', "domains/{$zone}/records/{$id}");
 			} catch (ClientException $e) {
 				$fqdn = ltrim(implode('.', [$subdomain, $zone]), '.');
 				return error("Failed to delete record `%s' type %s", $fqdn, $rr);
@@ -185,7 +185,7 @@
 		{
 			$api = $this->makeApi();
 			try {
-				$api->do('DELETE', "domains/${domain}");
+				$api->do('DELETE', "domains/{$domain}");
 			} catch (ClientException $e) {
 				return error("Failed to remove zone `%s', error: %s", $domain, $e->getMessage());
 			}
@@ -203,7 +203,7 @@
 		{
 			$client = $this->makeApi();
 			try {
-				$axfr = $client->do('GET', "domains/${domain}?per_page=100");
+				$axfr = $client->do('GET', "domains/{$domain}?per_page=100");
 				if (empty($axfr['domain']['zone_file'])) {
 					// zone doesn't exist
 					return null;
@@ -215,7 +215,7 @@
 				try {
 					$records = [];
 					$zoneText = $axfr['domain']['zone_file'];
-					$url = "domains/${domain}/records";
+					$url = "domains/{$domain}/records";
 					$queryStr = "per_page=100";
 					while (true) {
 						$batch = $client->do('GET', "$url?$queryStr");
@@ -298,7 +298,7 @@
 			try {
 				$merged = clone $old;
 				$new = $merged->merge($new);
-				$ret = $api->do('PUT', "domains/${zone}/records/${id}", $this->formatRecord($new));
+				$ret = $api->do('PUT', "domains/{$zone}/records/{$id}", $this->formatRecord($new));
 				if (isset($ret['domain_record'])) {
 					$ret = $ret['domain_record'];
 				}
