@@ -19,7 +19,7 @@
 
 		protected function formatCaa() {
 			// normalize target without quotes, period
-			$this->setMeta('data', trim($this->getMeta('data'), '".'));
+			$this->setMeta('data', trim((string)$this->getMeta('data'), '".'));
 			$this->appendDot();
 		}
 
